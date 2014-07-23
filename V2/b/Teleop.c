@@ -1,16 +1,14 @@
 #pragma config(Hubs,  S3, HTServo,  none,     none,     none)
-#pragma config(Hubs,  S4, HTMotor,  HTMotor,  none,     none)
+#pragma config(Hubs,  S4, HTMotor,  none,     none,     none)
 #pragma config(Sensor, S1,     sensorIR,       sensorHiTechnicIRSeeker1200)
 #pragma config(Sensor, S2,     sensorUltrasonic, sensorSONAR)
 #pragma config(Sensor, S3,     ,               sensorI2CMuxController)
 #pragma config(Sensor, S4,     ,               sensorI2CMuxController)
 #pragma config(Motor,  mtr_S4_C1_1,     motorRight,    tmotorTetrix, PIDControl, encoder)
 #pragma config(Motor,  mtr_S4_C1_2,     motorLeft,     tmotorTetrix, PIDControl, reversed, encoder)
-#pragma config(Motor,  mtr_S4_C2_1,     motorArm,      tmotorTetrix, openLoop)
-#pragma config(Motor,  mtr_S4_C2_2,     motorG,        tmotorTetrix, openLoop)
-#pragma config(Servo,  srvo_S3_C1_1,    servoGripper,         tServoContinuousRotation)
-#pragma config(Servo,  srvo_S3_C1_2,    servo2,               tServoNone)
-#pragma config(Servo,  srvo_S3_C1_3,    servo3,               tServoNone)
+#pragma config(Servo,  srvo_S3_C1_1,    servoArmPitch,        tServoContinuousRotation)
+#pragma config(Servo,  srvo_S3_C1_2,    servoArmSegment,      tServoContinuousRotation)
+#pragma config(Servo,  srvo_S3_C1_3,    servoGripper,         tServoStandard)
 #pragma config(Servo,  srvo_S3_C1_4,    servo4,               tServoNone)
 #pragma config(Servo,  srvo_S3_C1_5,    servo5,               tServoNone)
 #pragma config(Servo,  srvo_S3_C1_6,    servo6,               tServoNone)
@@ -22,13 +20,29 @@
 #include "JoystickDriver.c"
 #include "Teleop.h"
 
-volatile float driveSpeedLeft;
-volatile float driveSpeedRight;
+volatile float averageRuntime;
+volatile int averageRuntimeCount;
 
-volatile float driveMaxSpeed;
+volatile int driveMaxSpeed;
+
+volatile int driveSpeedLeft;
+volatile int driveSpeedRight;
+
+volatile int gripperState;
+
+volatile int servoArmPitchValue;
+volatile int servoArmSegmentValue;
 
 // Initializations
 void initialize() {
+	averageRuntime = 0.0;
+	averageRuntimeCount = 0;
+	driveMaxSpeed = 100;
+	driveSpeedLeft = 0;
+	driveSpeedRight = 0;
+	gripperState = 0;
+	servoArmPitchValue = 0;
+	servoArmSegmentValue = 0;
 }
 
 // Main task
@@ -42,13 +56,31 @@ task main() {
 	StartTask(controller);
 	StartTask(screen);
 
-	// Update physical states
 	while (true) {
-		motor[motorLeft]        = (int) driveSpeedLeft;
-		motor[motorRight]       = (int) driveSpeedRight;
+		averageRuntimeCount++;
+
+		if (averageRuntimeCount > MAX_AVG_RUNTIME_CNT) {
+			averageRuntimeCount = 1;
+			averageRuntime = 0;
+		}
+
+		averageRuntime = (averageRuntime + time1[T1]/1000.0)/averageRuntimeCount;
+
+		ClearTimer(T1);
+
+		// Set state of motor
+		motor[motorLeft]        = driveSpeedLeft;
+		motor[motorRight]       = driveSpeedRight;
 
 		servo[servoArmPitch]    = servoArmPitchValue;
 		servo[servoArmSegment]  = servoArmSegmentValue;
+
+		// Set state of gripper
+		if (gripperState == 0) {
+			servo[servoGripper] = SERVO_GRIPPER_CLOSED_POS;
+		} else if (gripperState == 1) {
+			servo[servoGripper] = SERVO_GRIPPER_OPEN_POS;
+		}
 
 		// Allow other tasks to run
 		EndTimeSlice();
@@ -115,6 +147,7 @@ task screen() {
 		nxtDisplayTextLine(2, "Left: %i", driveSpeedLeft);
 		nxtDisplayTextLine(3, "Right: %i", driveSpeedRight);
 		nxtDisplayTextLine(4, "Arm pitch: %i", servoArmPitchValue);
+		nxtDisplayTextLine(5, "Arm segment pitch: %i", servoArmSegmentValue);
 
 		wait1Msec(50);
 

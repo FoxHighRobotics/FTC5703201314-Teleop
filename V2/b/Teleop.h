@@ -2,6 +2,8 @@
 // The Doppler Effect 2013
 // Teleop 2 - Header
 
+#define MAX_AVG_RUNTIME_CNT 3
+
 // Motor constants
 #define MOTOR_DRIVE_HIGH_SPEED 100
 #define MOTOR_DRIVE_LOW_SPEED 50
